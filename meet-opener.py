@@ -123,6 +123,7 @@ def parse_events(ics_text):
 
         meet_m = re.search(r'https://meet\.google\.com/([\w-]+)', block)
         if not meet_m:
+            log(f"Skipped (no Meet link): {summary}  {start.isoformat()}")
             continue
 
         event = {
@@ -191,6 +192,8 @@ def main():
                 notify("Google Meet opening now!", event['summary'])
                 mark_opened(uid)
                 log(f"Opened: {event['summary']}  {event['url']}")
+            elif -1 <= minutes_until <= LOOK_AHEAD_MINUTES:
+                log(f"Skipped (already opened): {event['summary']}  {event['url']}")
 
 if __name__ == '__main__':
     main()
