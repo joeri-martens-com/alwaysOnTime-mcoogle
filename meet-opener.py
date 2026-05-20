@@ -1,35 +1,74 @@
 #!/usr/bin/env python3
 """
 meet-opener.py
-Runs every minute via launchd. Fetches Google Calendar ICS feeds, finds
-meetings starting within LOOK_AHEAD_MINUTES, and opens them in Chrome.
+Runs every minute (via launchd on macOS, Task Scheduler on Windows).
+Fetches Google Calendar ICS feeds, finds meetings starting within
+LOOK_AHEAD_MINUTES, and opens them in Chrome.
 
-Setup: run install.sh — it fills in ICS_URLS and wires up the launchd agent.
+Setup: run install.sh (macOS) or install.ps1 (Windows).
 """
 
-import re
-import urllib.request
-import subprocess
-from datetime import datetime, timezone, timedelta
 import os
+import re
+import ssl
+import subprocess
+import sys
+import tempfile
+import urllib.request
+from datetime import datetime, timezone, timedelta
 
-# ── Config (filled in by install.sh) ─────────────────────────────────────────
+# ── Config (filled in by install.sh / install.ps1) ───────────────────────────
 
 ICS_URLS = [
     # "https://calendar.google.com/calendar/ical/YOUR_SECRET_URL/basic.ics",
 ]
 
-LOOK_AHEAD_MINUTES = 2   # open the link up to N minutes before start
-CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-LOCK_FILE = "/tmp/meet_opener_opened.txt"
-LOG_FILE  = "/tmp/meet_opener.log"
+LOOK_AHEAD_MINUTES = 2  # open the link up to N minutes before start
+
+# ── Platform helpers ──────────────────────────────────────────────────────────
+
+def find_chrome():
+    if sys.platform == 'darwin':
+        return '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+    if sys.platform == 'win32':
+        candidates = [
+            os.path.expandvars(r'%ProgramFiles%\Google\Chrome\Application\chrome.exe'),
+            os.path.expandvars(r'%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe'),
+            os.path.expandvars(r'%LocalAppData%\Google\Chrome\Application\chrome.exe'),
+        ]
+        for path in candidates:
+            if os.path.exists(path):
+                return path
+    return None
+
+def notify(title, message):
+    if sys.platform == 'darwin':
+        subprocess.run(
+            ['osascript', '-e',
+             f'display notification "{message}" with title "{title}" sound name "Blow"'],
+            check=False,
+        )
+    elif sys.platform == 'win32':
+        ps = (
+            '[reflection.assembly]::loadwithpartialname("System.Windows.Forms") | Out-Null;'
+            '[reflection.assembly]::loadwithpartialname("System.Drawing") | Out-Null;'
+            '$n = New-Object System.Windows.Forms.NotifyIcon;'
+            '$n.Icon = [System.Drawing.SystemIcons]::Information;'
+            '$n.Visible = $true;'
+            f'$n.ShowBalloonTip(5000, "{title}", "{message}", '
+            '[System.Windows.Forms.ToolTipIcon]::Info)'
+        )
+        subprocess.run(['powershell', '-NoProfile', '-Command', ps],
+                       check=False, capture_output=True)
+
+_TEMP = tempfile.gettempdir()
+LOCK_FILE = os.path.join(_TEMP, 'meet_opener_opened.txt')
+LOG_FILE  = os.path.join(_TEMP, 'meet_opener.log')
 
 # ── ICS fetching ──────────────────────────────────────────────────────────────
 
 def fetch(url):
-    import ssl
-    # Limit to today + tomorrow so we don't re-parse years of history every minute
-    today = datetime.now(timezone.utc).date()
+    today    = datetime.now(timezone.utc).date()
     tomorrow = today + timedelta(days=1)
     sep = '&' if '?' in url else '?'
     url = f"{url}{sep}start-min={today.isoformat()}&start-max={tomorrow.isoformat()}"
@@ -128,7 +167,12 @@ def main():
         log("No ICS_URLS configured — nothing to do.")
         return
 
-    now = datetime.now(timezone.utc)
+    chrome = find_chrome()
+    if not chrome:
+        log("Chrome not found.")
+        return
+
+    now    = datetime.now(timezone.utc)
     opened = load_opened()
 
     for ics_url in ICS_URLS:
@@ -143,12 +187,8 @@ def main():
             uid = f"{event['start'].isoformat()}|{event['url']}"
 
             if -1 <= minutes_until <= LOOK_AHEAD_MINUTES and uid not in opened:
-                subprocess.Popen([CHROME, "--new-window", event['url']])
-                subprocess.run([
-                    'osascript', '-e',
-                    f'display notification "{event["summary"]}" '
-                    f'with title "Google Meet opening now!" sound name "Blow"',
-                ])
+                subprocess.Popen([chrome, '--new-window', event['url']])
+                notify("Google Meet opening now!", event['summary'])
                 mark_opened(uid)
                 log(f"Opened: {event['summary']}  {event['url']}")
 
