@@ -188,7 +188,10 @@ def main():
             uid = f"{event['start'].isoformat()}|{event['url']}"
 
             if -1 <= minutes_until <= LOOK_AHEAD_MINUTES and uid not in opened:
-                subprocess.Popen([chrome, '--new-window', event['url']])
+                if sys.platform == 'darwin':
+                    subprocess.Popen(['open', '-a', 'Google Chrome', '--args', '--new-window', event['url']])
+                else:
+                    subprocess.Popen([chrome, '--new-window', event['url']])
                 notify("Google Meet opening now!", event['summary'])
                 mark_opened(uid)
                 log(f"Opened: {event['summary']}  {event['url']}")
