@@ -188,7 +188,14 @@ def main():
 
             if -1 <= minutes_until <= LOOK_AHEAD_MINUTES and uid not in opened:
                 if sys.platform == 'darwin':
-                    subprocess.Popen(['open', '-a', 'Google Chrome', '--args', '--new-window', event['url']])
+                    script = (
+                        f'tell application "Google Chrome"\n'
+                        f'  make new window\n'
+                        f'  set URL of active tab of front window to "{event["url"]}"\n'
+                        f'  activate\n'
+                        f'end tell'
+                    )
+                    subprocess.Popen(['osascript', '-e', script])
                 else:
                     subprocess.Popen([chrome, '--new-window', event['url']])
                 notify("Google Meet opening now!", event['summary'])
