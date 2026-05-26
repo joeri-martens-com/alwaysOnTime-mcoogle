@@ -190,8 +190,8 @@ def main():
                 if sys.platform == 'darwin':
                     script = (
                         f'tell application "Google Chrome"\n'
-                        f'  make new window\n'
-                        f'  set URL of active tab of front window to "{event["url"]}"\n'
+                        f'  set w to make new window\n'
+                        f'  set URL of active tab of w to "{event["url"]}"\n'
                         f'  activate\n'
                         f'end tell'
                     )
