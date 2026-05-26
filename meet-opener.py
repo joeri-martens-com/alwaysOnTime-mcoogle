@@ -123,7 +123,6 @@ def parse_events(ics_text):
 
         meet_m = re.search(r'https://meet\.google\.com/([\w-]+)', block)
         if not meet_m:
-            log(f"Skipped (no Meet link): {summary}  {start.isoformat()}")
             continue
 
         event = {
